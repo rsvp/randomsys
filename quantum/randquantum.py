@@ -1,7 +1,10 @@
-#  Python Module for import                           Date : 2015-09-29
+#  Python Module for import                           Date : 2015-09-30
 #  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=python : per Python PEP 0263 
 ''' 
 _______________|  randquantum.py : true random numbers using quantum mechanics. 
+                      Repository : https://github.com/rsvp/randomsys
+
+     [For simple USAGE examples, skip to the conclusion at the end.]
 
 Reliable and unbiased random numbers are needed for a range of applications
 spanning from numerical modeling to cryptographic communications. While there
@@ -71,6 +74,7 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-09-30  Add generator functionality for sipping stream indefinitely.
 2015-09-29  First version. 
 '''
 
@@ -106,17 +110,16 @@ def randquantum( length=1000 ):
     needs in memory. The data is online thus the performance is I/O bound.
     ''' 
     #  We must possibly make multiple calls to overcome API length limitation.
-    calls = int(( length / 1024 ) + 1 )
-    #                    ^Python 3 division acceptable also.
+    calls = int(( length / 1024.5 ) + 1 )
     biglist = []
     for i in range( calls ):
         biglist += getanu()
     return biglist[:length]
 
 
-def truequantum( length=1000 ):
+def boolquantum( length=1000 ):
     '''Convert randquantum to a random list of zeros and ones.
-    In Python, 0 is False, anything else True.
+    In Python, 0 is False, anything else True, hence this is boolean.
     '''
     return [ i % 2 for i in randquantum( length ) ]
 
@@ -132,7 +135,7 @@ def realquantum( length=1000, endpoint=1.0 ):
 def intquantum( length=1000, endinteger=9 ):
     '''Convert randquantum to random integers: [0, endinteger]
     Not recommended for endinteger > 65535, but see seed() below.
-    If your endinteger is 1, we recommend truequantum() instead.
+    If your endinteger is 1, we recommend boolquantum() instead.
     '''
     endpoint = endinteger + 0.9999999999999999
     return [ int(r) for r in realquantum( length, endpoint ) ]
@@ -185,6 +188,116 @@ def gaussquantum( length=1000, mean=0, sdev=1.0 ):
 
 #  Interesting discussion regarding generating Gaussian distribution: 
 #  http://stackoverflow.com/questions/75677/converting-a-uniform-distribution-to-a-normal-distribution
+
+
+# ======================================================= GENERATORS =========== 
+#  Above has focused on lists, but in practice, 
+#  generators are more natural within other scripts.
+#  The user should not worry about extracting an element from a random list.
+
+
+def sipstream( func_quantum, argtuple=(1024,) ):
+     '''Generalized generator for certain randquantum functions. 
+     Consider a stream to be lists being downloaded.
+     This generator yields an element of a list as it is needed
+     iteratively. Usage example:
+          import randquantum as rq
+          sip = sipstream( rq.gaussquantum, (1024, 0, 1.0) )
+          #     where the tuple serves as positional arguments.
+          print next( sip )
+          print next( sip )
+          print next( sip )
+     '''
+     length = argtuple[0]
+     stream = apply( func_quantum, argtuple )
+     i = 0
+     while True:
+          yield stream[i]
+          i += 1
+          if i == length:
+               i = 0
+               #   And FRESHEN the stream!
+               stream = apply( func_quantum, argtuple )
+
+
+# _______________ READY-MADE GENERATORS and iterating functions:
+#
+#  N.B. -  "Functions containing a yield statement are compiled
+#           specially as generators -- when called, they return
+#           a generator OBJECT that supports the iterator object
+#           interface [e.g. next() or .next()]."
+#  "next()" is a Python built-in for iterators since v2.6.
+
+
+sip_boolean = sipstream( boolquantum,  (1024,)        )
+sip_trio    = sipstream( intquantum,   (1024, 2)      )
+sip_integer = sipstream( intquantum,   (1024, 9)      )
+sip_hundred = sipstream( intquantum,   (1024, 100)    )
+sip_real    = sipstream( realquantum,  (1024, 1.0)    )
+sip_cent    = sipstream( realquantum,  (1024, 100.0)  )
+sip_gauss   = sipstream( gaussquantum, (1024, 0, 1.0) )
+
+
+def boolean():  return sip_boolean.next()
+def trio():     return sip_trio.next() - 1
+def integer():  return sip_integer.next()
+def hundred():  return sip_hundred.next()
+def real():     return sip_real.next()
+def cent():     return sip_cent.next()
+def gauss():    return sip_gauss.next()
+
+'''
+============================================================ CONCLUSION ====== 
+
+USAGE of these generators is very simple, for example:
+
+     import randquantum as rq
+     x = rq.gauss()
+     y = rq.gauss()
+
+     if rq.boolean():
+          print "yes, it's true."
+     else:
+          print "nothingness."
+
+So x and y are independently drawn from a standard 
+Gaussian distribution, i.e. the normal N(0,1), 
+and of course, they will be uncorrelated.
+
+The results for a and b should be either 0 or 1.
+
+Such generator based functions can be invoked anywhere 
+in your program without worrying about exhausting 
+its list of origin. Our generators are designed to 
+refresh automatically, and iterate indefinitely 
+without blowing up memory space.
+
+
+FOUR UNUSUAL GENERATORS:
+rq.trio()    yields one of three equally possible: -1, 0, 1.
+rq.integer() yields a single integer 0 through 9    inclusive.
+rq.cent()    will be real-valued between [0, 100.0] inclusive.
+rq.hundred() will be an integer between  [0, 100]   inclusive.
+
+THREE CLASSIC GENERATORS:
+rq.boolean() yields binary-valued: 0 or 1.
+rq.real() is real-valued [0,1] where both endpoints are included.
+rq.gauss() is drawn from the standard normal distribution N(0,1).
+
+
+FAQ:     What is the hit on performance versus pseudo random?
+Answer:  Just as fast, except those milliseconds when a tiny json file
+         is downloading. This is where the speed of your internet
+         connection matters. You could cache in the background.
+
+
+FAQ:     Why do these generators not output continuous values?
+Answer:  Well, these true random numbers originate from 
+         the **quantum** world where fundamentally everything
+         is discrete.
+
+Enjoy!
+'''
 
 
 
