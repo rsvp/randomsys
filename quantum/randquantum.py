@@ -1,4 +1,4 @@
-#  Python Module for import                           Date : 2015-09-30
+#  Python Module for import                           Date : 2015-10-02
 #  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=python : per Python PEP 0263 
 ''' 
 _______________|  randquantum.py : true random numbers using quantum mechanics. 
@@ -74,6 +74,11 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-10-02  Rename intquantum to b16quantum as a precaution.
+               Add randint to supplement b16quantum.
+               Rename a generator to nine. 
+               Rewrite seed to use efficient generator.
+               Add randpick and permute for arbitrarily long list.
 2015-09-30  Add generator functionality for sipping stream indefinitely.
 2015-09-29  First version. 
 '''
@@ -93,6 +98,7 @@ def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' 
     pages are authenticated and encrypted for security.
     '''
     page = urllib2.urlopen( url, timeout=7 )
+    #  print "DEBUG: retrieved json line from server."
     json = page.read()
     #  For length=3, json looks like:
     #      {"type":"uint16","length":3,"data":[7731,40732,1971],"success":true} 
@@ -132,21 +138,13 @@ def realquantum( length=1000, endpoint=1.0 ):
     return [ i * multiplier for i in randquantum( length ) ]
 
 
-def intquantum( length=1000, endinteger=9 ):
-    '''Convert randquantum to random integers: [0, endinteger]
-    Not recommended for endinteger > 65535, but see seed() below.
+def b16quantum( length=1000, endinteger=9 ):
+    '''Random integers: [0, endinteger] where endinteger < 65536.
+    For larger endinterger, consult randint below.
     If your endinteger is 1, we recommend boolquantum() instead.
     '''
     endpoint = endinteger + 0.9999999999999999
     return [ int(r) for r in realquantum( length, endpoint ) ]
-
-
-def seed( length=19 ):
-    '''Create a single random integer of any length.'''
-    digits = intquantum( length, endinteger=9 )
-    strd = ''.join([ str(d) for d in digits ])    
-    #   Python can represent any integer up to memory limits!
-    return int( strd )
 
 
 def gaussquantum( length=1000, mean=0, sdev=1.0 ):
@@ -230,9 +228,9 @@ def sipstream( func_quantum, argtuple=(1024,) ):
 
 
 sip_boolean = sipstream( boolquantum,  (1024,)        )
-sip_trio    = sipstream( intquantum,   (1024, 2)      )
-sip_integer = sipstream( intquantum,   (1024, 9)      )
-sip_hundred = sipstream( intquantum,   (1024, 100)    )
+sip_trio    = sipstream( b16quantum,   (1024, 2)      )
+sip_nine    = sipstream( b16quantum,   (1024, 9)      )
+sip_hundred = sipstream( b16quantum,   (1024, 100)    )
 sip_real    = sipstream( realquantum,  (1024, 1.0)    )
 sip_cent    = sipstream( realquantum,  (1024, 100.0)  )
 sip_gauss   = sipstream( gaussquantum, (1024, 0, 1.0) )
@@ -240,11 +238,55 @@ sip_gauss   = sipstream( gaussquantum, (1024, 0, 1.0) )
 
 def boolean():  return sip_boolean.next()
 def trio():     return sip_trio.next() - 1
-def integer():  return sip_integer.next()
+def nine():     return sip_nine.next()
 def hundred():  return sip_hundred.next()
 def real():     return sip_real.next()
 def cent():     return sip_cent.next()
 def gauss():    return sip_gauss.next()
+
+
+
+def seed( length=19 ):
+    '''Create a single random integer within given length.'''
+    #  seed() turns out to be VERY useful for random integers, and nine()
+    #  as a generator greatly reduces the number of calls to the server.
+    s = ''
+    for i in range( length):
+        s += str( nine() )       
+    #  Python can represent any integer up to memory limits!
+    return int( s )
+
+
+def randint( endinteger ):
+    '''Random integer: [0, endinteger]; endinteger may be arbitrarily large!
+    '''
+    ilen = len( str(endinteger) )
+    guess = seed( ilen )
+    while guess > endinteger:
+        guess = seed( ilen )
+    return guess
+
+
+def randpick( listing, count=1, replace=True ):
+    '''Randomly pick element(s) from a list.'''
+    if replace==False  and  count > len(listing):
+        raise IndexError('Please adjust count <= length of listing.')    
+    it = listing
+    picks = []
+    for k in range( count ):
+        size = len( it )
+        lucky = randint( size-1 )
+        picks.append(  it[lucky] )
+        if not replace:
+            it.remove( it[lucky] )
+    return picks
+
+
+def permute( listing ):
+    '''Randomly permute an entire list.'''
+    #  If the listing is huge, this could take a long time to finish.
+    return randpick( listing, len(listing), replace=False )
+
 
 '''
 ============================================================ CONCLUSION ====== 
@@ -275,7 +317,7 @@ without blowing up memory space.
 
 FOUR UNUSUAL GENERATORS:
 rq.trio()    yields one of three equally possible: -1, 0, 1.
-rq.integer() yields a single integer 0 through 9    inclusive.
+rq.nine()    yields a single integer 0 through 9    inclusive.
 rq.cent()    will be real-valued between [0, 100.0] inclusive.
 rq.hundred() will be an integer between  [0, 100]   inclusive.
 
