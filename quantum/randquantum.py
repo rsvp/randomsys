@@ -1,4 +1,4 @@
-#  Python Module for import                           Date : 2015-10-02
+#  Python Module for import                           Date : 2015-10-03
 #  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=python : per Python PEP 0263 
 ''' 
 _______________|  randquantum.py : true random numbers using quantum mechanics. 
@@ -53,6 +53,9 @@ In development, one can use pseudo random numbers for simulations (since their
 performance is not I/O bound) -- but as a final double-check on the results, 
 use random numbers which are truly random.
 
+If the server is somehow inaccessible, this module is written to fallback 
+on pseudo simulation of the authentic process (with warnings emitted).
+
 
 Statistical TEST RESULTS daily:  http://qrng.anu.edu.au/NIST.php
 
@@ -74,17 +77,29 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-10-03  Change real() from [0, 1.0] to [0, 1.0) for compatibility.
+               Rewrite gaussquantum to use generators.
+               Use Python random.randrange as offline fallback.
 2015-10-02  Rename intquantum to b16quantum as a precaution.
                Add randint to supplement b16quantum.
                Rename a generator to nine. 
                Rewrite seed to use efficient generator.
-               Add randpick and permute for arbitrarily long list.
+               Add randpick and permute [shuffle] for arbitrarily long list.
 2015-09-30  Add generator functionality for sipping stream indefinitely.
 2015-09-29  First version. 
 '''
 
 import urllib2
-from math import log
+from math   import log
+
+from random import randrange as pseudorange  #  Only for offline fallback.
+from sys    import stderr                    #  Used to warn of fallback.
+
+
+def warn( message ):
+    '''Send warning message via stderr.'''
+    #  Portable for both Python 2 and 3.
+    stderr.write( ' :!  Warning: ' + message + '\n')
 
 
 def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' ):
@@ -109,18 +124,39 @@ def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' 
     return [ int(s) for s in strlist ]
 
 
-def randquantum( length=1000 ):
+def randquantum_authentic( length=1000 ):
     '''Quantum random integers between [0, 65535] inclusive in a list.
-  
-    Performance is improved overall if LENGTH is set to what your project
-    needs in memory. The data is online thus the performance is I/O bound.
+    The data is online thus the performance is I/O bound.
     ''' 
+    #  length of 1024 will make exactly one call to server.
     #  We must possibly make multiple calls to overcome API length limitation.
     calls = int(( length / 1024.5 ) + 1 )
     biglist = []
     for i in range( calls ):
         biglist += getanu()
     return biglist[:length]
+
+
+def randquantum_pseudo( length=1000 ): 
+    '''Pseudo simulation of randquantum_authentic(), intended as fallback.
+    Offline call to the standard Python package random.
+    '''
+    return [ pseudorange(0, 65536) for i in range(length) ]
+
+
+def randquantum( length=1000, authentic=True ):
+    '''Authentic PRIMARY DEPENDENCY with offline FALLBACK.
+    ___ATTN___  "authentic" switch for developer's debugging only.
+    '''
+    if authentic:
+        try:
+            return randquantum_authentic( length )
+        except:
+            warn(    "randquantum_authentic FAIL: now, PSEUDO simulation." )
+            return randquantum_pseudo( length )
+    else:
+        warn( "authentic=False for randquantum implies PSEUDO simulation." )
+        return randquantum_pseudo( length )
 
 
 def boolquantum( length=1000 ):
@@ -147,51 +183,15 @@ def b16quantum( length=1000, endinteger=9 ):
     return [ int(r) for r in realquantum( length, endpoint ) ]
 
 
-def gaussquantum( length=1000, mean=0, sdev=1.0 ):
-    '''Transform random uniform to normal Gaussian distribution.
-
-    Modified from Python random module, normalvariate function.
-    Reference: Albert J. Kinderman and J.F. Monahan,
-    "Computer generation of random variables using the ratio of 
-    uniform deviates", ACM Trans Math Software 1977, v3:3:257-260.
-
-    (Python's faster random.gauss() uses trig functions so we 
-    guess that is the Box-Muller algorithm which we are avoiding
-    since it appears to constrain abs(z) to under 7.)
-
-    Ref: https://en.wikipedia.org/wiki/Normal_distribution
-    see "Generating values" section.
-    '''
-    NV_MAGICCONST = 1.71552776992141
-    #             = 4*exp(-0.5)/sqrt(2.0)
-    safelength = int( length * 1.47 )
-    #            Expecting about 32% rejection rate below.
-    gauss = []
-    while len(gauss) < length:
-        unx = realquantum( safelength, endpoint=0.999999999 )
-        uny = realquantum( safelength, endpoint=0.999999999 )
-        for i in range( safelength ):
-            u1 = unx[i]
-            u2 = 1 - uny[i]
-            z = NV_MAGICCONST*(u1-0.5)/u2
-            #   z is the KEY ratio essentially between
-            #     two random reals both from uniform distribution.
-            #     It is also the multiplier to standard deviation.
-            zz = z*z/4.0
-            #  Possible rejection next...
-            if zz <= -log(u2):
-                gauss.append( mean + (z * sdev))
-    return gauss[:length]
-
-
-#  Interesting discussion regarding generating Gaussian distribution: 
-#  http://stackoverflow.com/questions/75677/converting-a-uniform-distribution-to-a-normal-distribution
-
 
 # ======================================================= GENERATORS =========== 
 #  Above has focused on lists, but in practice, 
 #  generators are more natural within other scripts.
 #  The user should not worry about extracting an element from a random list.
+#  Also these generators will cache the unused portion of a list in memory, 
+#  and stand-by for a yield statement thus conserving calls to the server.
+#  The generators below will "fill-up" only when needed (so this means 
+#  the quantity of data is not pre-set unlike the lists above).
 
 
 def sipstream( func_quantum, argtuple=(1024,) ):
@@ -231,9 +231,8 @@ sip_boolean = sipstream( boolquantum,  (1024,)        )
 sip_trio    = sipstream( b16quantum,   (1024, 2)      )
 sip_nine    = sipstream( b16quantum,   (1024, 9)      )
 sip_hundred = sipstream( b16quantum,   (1024, 100)    )
-sip_real    = sipstream( realquantum,  (1024, 1.0)    )
+sip_real    = sipstream( realquantum,  (1024, 0.999999999999))
 sip_cent    = sipstream( realquantum,  (1024, 100.0)  )
-sip_gauss   = sipstream( gaussquantum, (1024, 0, 1.0) )
 
 
 def boolean():  return sip_boolean.next()
@@ -242,7 +241,6 @@ def nine():     return sip_nine.next()
 def hundred():  return sip_hundred.next()
 def real():     return sip_real.next()
 def cent():     return sip_cent.next()
-def gauss():    return sip_gauss.next()
 
 
 
@@ -282,10 +280,58 @@ def randpick( listing, count=1, replace=True ):
     return picks
 
 
-def permute( listing ):
-    '''Randomly permute an entire list.'''
-    #  If the listing is huge, this could take a long time to finish.
+def shuffle( listing ):
+    '''Randomly shuffle an entire list: permutation.'''
+    #  Even for small len(x), the total number of permutations of x is 
+    #  larger than the period of most PSEUDO random number generators; 
+    #  this implies that most permutations of a long sequence can 
+    #  never be generated. But this is not true for randquantum_authentic;
+    #  though if the listing is huge, this could take a long time to finish.
+    #
     return randpick( listing, len(listing), replace=False )
+
+
+def gaussquantum( length=1000, mean=0, sdev=1.0 ):
+    '''Transform random uniform to normal Gaussian distribution.
+
+    Modified from Python random module, normalvariate function.
+    Reference: Albert J. Kinderman and J.F. Monahan,
+    "Computer generation of random variables using the ratio of 
+    uniform deviates", ACM Trans Math Software 1977, v3:3:257-260.
+
+    (Python's faster random.gauss() uses trig functions so we 
+    guess that is the Box-Muller algorithm which we are avoiding
+    since it appears to constrain abs(z) to under 7.)
+
+    Ref: https://en.wikipedia.org/wiki/Normal_distribution
+    see "Generating values" section.
+    '''
+    NV_MAGICCONST = 1.71552776992141
+    #             = 4*exp(-0.5)/sqrt(2.0)
+    gauss = []
+    while len(gauss) < length:
+        u1 = real()
+        u2 = 1 - real()
+        z = NV_MAGICCONST*(u1-0.5)/u2
+        #   z is the KEY ratio essentially between
+        #     two random reals both from uniform distribution.
+        #     It is also the multiplier to standard deviation.
+        zz = z*z/4.0
+        #  Possible rejection next...
+        if zz <= -log(u2):
+            gauss.append( mean + (z * sdev))
+            #  Approx. acceptance rate: 73% for <= condition.
+    return gauss[:length]
+
+
+# _______________ READY-MADE GENERATOR for standard Gaussian distribution:
+
+sip_gauss   = sipstream( gaussquantum, (1024, 0, 1.0) )
+def gauss():    return sip_gauss.next()
+
+
+#  Interesting discussion regarding generating Gaussian distribution: 
+#  http://stackoverflow.com/questions/75677/converting-a-uniform-distribution-to-a-normal-distribution
 
 
 '''
@@ -297,16 +343,16 @@ USAGE of these generators is very simple, for example:
      x = rq.gauss()
      y = rq.gauss()
 
-     if rq.boolean():
-          print "yes, it's true."
-     else:
-          print "nothingness."
-
 So x and y are independently drawn from a standard 
 Gaussian distribution, i.e. the normal N(0,1), 
 and of course, they will be uncorrelated.
 
-The results for a and b should be either 0 or 1.
+Illustrating random 0 or 1:
+
+     if rq.boolean():
+          print "yes, it's true."
+     else:
+          print "nothingness."
 
 Such generator based functions can be invoked anywhere 
 in your program without worrying about exhausting 
@@ -321,7 +367,7 @@ rq.nine()    yields a single integer 0 through 9    inclusive.
 rq.cent()    will be real-valued between [0, 100.0] inclusive.
 rq.hundred() will be an integer between  [0, 100]   inclusive.
 
-THREE CLASSIC GENERATORS:
+THREE TRADITIONAL GENERATORS:
 rq.boolean() yields binary-valued: 0 or 1.
 rq.real() is real-valued [0,1] where both endpoints are included.
 rq.gauss() is drawn from the standard normal distribution N(0,1).
