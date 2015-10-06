@@ -1,4 +1,4 @@
-#  Python Module for import                           Date : 2015-10-03
+#  Python Module for import                           Date : 2015-10-05
 #  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=python : per Python PEP 0263 
 ''' 
 _______________|  randquantum.py : true random numbers using quantum mechanics. 
@@ -77,6 +77,8 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-10-05  Introduce NINERS variable for float representation.
+               Fix in-place .remove() bug in randpick by copy operation.
 2015-10-03  Change real() from [0, 1.0] to [0, 1.0) for compatibility.
                Rewrite gaussquantum to use generators.
                Use Python random.randrange as offline fallback.
@@ -94,6 +96,11 @@ from math   import log
 
 from random import randrange as pseudorange  #  Only for offline fallback.
 from sys    import stderr                    #  Used to warn of fallback.
+
+
+NINERS = 0.99999999999
+#        ^reasonable system-dependent float representation of (1 - epsilon).
+#         More nines could set it exactly to 1, resulting in rare errors. 
 
 
 def warn( message ):
@@ -179,7 +186,7 @@ def b16quantum( length=1000, endinteger=9 ):
     For larger endinterger, consult randint below.
     If your endinteger is 1, we recommend boolquantum() instead.
     '''
-    endpoint = endinteger + 0.9999999999999999
+    endpoint = endinteger + NINERS
     return [ int(r) for r in realquantum( length, endpoint ) ]
 
 
@@ -231,7 +238,7 @@ sip_boolean = sipstream( boolquantum,  (1024,)        )
 sip_trio    = sipstream( b16quantum,   (1024, 2)      )
 sip_nine    = sipstream( b16quantum,   (1024, 9)      )
 sip_hundred = sipstream( b16quantum,   (1024, 100)    )
-sip_real    = sipstream( realquantum,  (1024, 0.999999999999))
+sip_real    = sipstream( realquantum,  (1024, NINERS ))
 sip_cent    = sipstream( realquantum,  (1024, 100.0)  )
 
 
@@ -269,7 +276,8 @@ def randpick( listing, count=1, replace=True ):
     '''Randomly pick element(s) from a list.'''
     if replace==False  and  count > len(listing):
         raise IndexError('Please adjust count <= length of listing.')    
-    it = listing
+    it = listing[:] 
+    #            ^need a copy, not reference, due to in-place .remove()
     picks = []
     for k in range( count ):
         size = len( it )
@@ -386,6 +394,24 @@ Answer:  Well, these true random numbers originate from
 
 Enjoy!
 '''
+
+
+# _______________ ALTERNATE SOURCES of randomness
+#
+#  - Humboldt University, Berlin: http://qrng.physik.hu-berlin.de 
+#       Uses photon arrival times. Site requires registration.
+#
+#  - http://www.random.org was cool, but now has turned commercial.
+#       Uses atmospheric noise, so it's empirical rather than 
+#       theoretical in nature.
+
+
+# _______________ TESTING randomness
+#
+#  - Start at the NIST, U.S. National Institute for Standards and Technology,
+#          Computer Security Division: http://csrc.nist.gov/groups/ST/toolkit/rng
+#
+#  - Check for UPDATES at https://git.io/randomsys
 
 
 
