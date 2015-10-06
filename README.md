@@ -6,7 +6,7 @@ We study the behavior of random systems algorithmically.
 
 ## Generating truly random numbers: randquantum
 
-This notebook gives a DEMONSTRATION 
+[This notebook gives a DEMONSTRATION](https://github.com/rsvp/randomsys/blob/master/quantum/randquantum-demo.ipynb) 
 of the useful functions which yield true random numbers produced live from an
 experiment in quantum mechanics. They are contained in the `randquantum` Python
 module under the `quantum` directory.
