@@ -77,6 +77,11 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-10-08  Induce independence by hybrid between authentic and pseudo,
+               rename old randquantum() as randquantum_safe().
+               AUTH sets probability of authentic service.
+               Number the warnings issued by global Nwarn.
+               Remove default length argument.
 2015-10-05  Introduce NINERS variable for float representation.
                Fix in-place .remove() bug in randpick by copy operation.
 2015-10-03  Change real() from [0, 1.0] to [0, 1.0) for compatibility.
@@ -98,15 +103,27 @@ from random import randrange as pseudorange  #  Only for offline fallback.
 from sys    import stderr                    #  Used to warn of fallback.
 
 
+AUTH = 0.50
+#      Non-zero prob( authentic ), see randquantum() which jumbles in pseudo.
+#      Induces stochastic independence due to use of two sources.
+bestlen = int( 1024 / AUTH )
+#         Helps to minimize calls to server.
+
+
 NINERS = 0.99999999999
 #        ^reasonable system-dependent float representation of (1 - epsilon).
-#         More nines could set it exactly to 1, resulting in rare errors. 
+#         More nines can cause rare unintended roundup errors. 
 
+
+Nwarn = 0
+#       Number of warnings. Usually indicative of failed calls to server.
 
 def warn( message ):
     '''Send warning message via stderr.'''
     #  Portable for both Python 2 and 3.
-    stderr.write( ' :!  Warning: ' + message + '\n')
+    global Nwarn
+    Nwarn += 1
+    stderr.write( ' :!  Warning #' + str(Nwarn) + ': '  + message + '\n')
 
 
 def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' ):
@@ -119,8 +136,10 @@ def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' 
     the server will deliver new and unique random numbers. Moreover, these
     pages are authenticated and encrypted for security.
     '''
-    page = urllib2.urlopen( url, timeout=7 )
-    #  print "DEBUG: retrieved json line from server."
+    #  print "DEBUG: getanu() waiting for server to respond..."
+    page = urllib2.urlopen( url, timeout=2 )
+    #  print "DEBUG: server OK, retrieved json line."
+    # ----------------
     json = page.read()
     #  For length=3, json looks like:
     #      {"type":"uint16","length":3,"data":[7731,40732,1971],"success":true} 
@@ -131,7 +150,7 @@ def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' 
     return [ int(s) for s in strlist ]
 
 
-def randquantum_authentic( length=1000 ):
+def randquantum_authentic( length ):
     '''Quantum random integers between [0, 65535] inclusive in a list.
     The data is online thus the performance is I/O bound.
     ''' 
@@ -144,36 +163,63 @@ def randquantum_authentic( length=1000 ):
     return biglist[:length]
 
 
-def randquantum_pseudo( length=1000 ): 
+def randquantum_pseudo( length ): 
     '''Pseudo simulation of randquantum_authentic(), intended as fallback.
     Offline call to the standard Python package random.
     '''
     return [ pseudorange(0, 65536) for i in range(length) ]
 
 
-def randquantum( length=1000, authentic=True ):
+def randquantum_safe( length, authentic=True ):
     '''Authentic PRIMARY DEPENDENCY with offline FALLBACK.
     ___ATTN___  "authentic" switch for developer's debugging only.
     '''
     if authentic:
         try:
+            #  Possible spend "timeout" seconds here in limbo...
             return randquantum_authentic( length )
         except:
-            warn(    "randquantum_authentic FAIL: now, PSEUDO simulation." )
+            warn(         "randquantum_authentic FAIL: now, PSEUDO simulation." )
             return randquantum_pseudo( length )
     else:
-        warn( "authentic=False for randquantum implies PSEUDO simulation." )
+        warn( "authentic=False for randquantum_safe implies PSEUDO simulation." )
         return randquantum_pseudo( length )
 
 
-def boolquantum( length=1000 ):
+def randquantum( length ):
+    '''Induce INDEPENDENCE by HYBRID between authentic and pseudo.
+    The sources are clearly independent. This method also stochastically 
+    disrupts the deterministic periodicity of pseudo generation.
+    SPEED: by incorporating pseudo, we fetch fewer times from the server.
+    '''
+    #            AUTH at the top sets prob(authentic).
+    aulen = int( AUTH * length )
+    safe  = randquantum_safe( aulen )  
+    #       ^authentic with fallback provision, which means hybrid 
+    #       could be all pseudo if authentic fails entirely.
+    authinverse = int( 1 / AUTH )
+    hybrid = []
+    i = aulen - 1
+    while len(hybrid) < length:
+        if pseudorange( 0, authinverse ):
+            #              ^stochastically jumble authentic vs pseudo.
+            hybrid.append( pseudorange(0, 65536) )
+        else:
+            #  Pick element from tailend of au in reverse order.
+            if i >= 0:
+                hybrid.append( safe[i] )
+                i -= 1
+    return hybrid[:length]
+
+
+def boolquantum( length ):
     '''Convert randquantum to a random list of zeros and ones.
     In Python, 0 is False, anything else True, hence this is boolean.
     '''
     return [ i % 2 for i in randquantum( length ) ]
 
 
-def realquantum( length=1000, endpoint=1.0 ):
+def realquantum( length, endpoint=1.0 ):
     '''Convert randquantum to random real numbers: [0, endpoint]
     Discrete resolution is 1.52590219e-05 for [0,1].
     '''
@@ -181,7 +227,7 @@ def realquantum( length=1000, endpoint=1.0 ):
     return [ i * multiplier for i in randquantum( length ) ]
 
 
-def b16quantum( length=1000, endinteger=9 ):
+def b16quantum( length, endinteger=9 ):
     '''Random integers: [0, endinteger] where endinteger < 65536.
     For larger endinterger, consult randint below.
     If your endinteger is 1, we recommend boolquantum() instead.
@@ -201,7 +247,7 @@ def b16quantum( length=1000, endinteger=9 ):
 #  the quantity of data is not pre-set unlike the lists above).
 
 
-def sipstream( func_quantum, argtuple=(1024,) ):
+def sipstream( func_quantum, argtuple=(bestlen,) ):
      '''Generalized generator for certain randquantum functions. 
      Consider a stream to be lists being downloaded.
      This generator yields an element of a list as it is needed
@@ -234,12 +280,12 @@ def sipstream( func_quantum, argtuple=(1024,) ):
 #  "next()" is a Python built-in for iterators since v2.6.
 
 
-sip_boolean = sipstream( boolquantum,  (1024,)        )
-sip_trio    = sipstream( b16quantum,   (1024, 2)      )
-sip_nine    = sipstream( b16quantum,   (1024, 9)      )
-sip_hundred = sipstream( b16quantum,   (1024, 100)    )
-sip_real    = sipstream( realquantum,  (1024, NINERS ))
-sip_cent    = sipstream( realquantum,  (1024, 100.0)  )
+sip_boolean = sipstream( boolquantum,  (bestlen,)        )
+sip_trio    = sipstream( b16quantum,   (bestlen, 2)      )
+sip_nine    = sipstream( b16quantum,   (bestlen, 9)      )
+sip_hundred = sipstream( b16quantum,   (bestlen, 100)    )
+sip_real    = sipstream( realquantum,  (bestlen, NINERS ))
+sip_cent    = sipstream( realquantum,  (bestlen, 100.0)  )
 
 
 def boolean():  return sip_boolean.next()
@@ -299,7 +345,7 @@ def shuffle( listing ):
     return randpick( listing, len(listing), replace=False )
 
 
-def gaussquantum( length=1000, mean=0, sdev=1.0 ):
+def gaussquantum( length, mean=0, sdev=1.0 ):
     '''Transform random uniform to normal Gaussian distribution.
 
     Modified from Python random module, normalvariate function.
@@ -334,7 +380,7 @@ def gaussquantum( length=1000, mean=0, sdev=1.0 ):
 
 # _______________ READY-MADE GENERATOR for standard Gaussian distribution:
 
-sip_gauss   = sipstream( gaussquantum, (1024, 0, 1.0) )
+sip_gauss   = sipstream( gaussquantum, (bestlen, 0, 1.0) )
 def gauss():    return sip_gauss.next()
 
 
