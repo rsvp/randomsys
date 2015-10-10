@@ -1,4 +1,4 @@
-#  Python Module for import                           Date : 2015-10-05
+#  Python Module for import                           Date : 2015-10-09
 #  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=python : per Python PEP 0263 
 ''' 
 _______________|  randquantum.py : true random numbers using quantum mechanics. 
@@ -56,8 +56,15 @@ use random numbers which are truly random.
 If the server is somehow inaccessible, this module is written to fallback 
 on pseudo simulation of the authentic process (with warnings emitted).
 
+New 2015-10-09: we induce independence by creating a hybrid between authentic
+and pseudo. Since the sources are clearly independent, this method also
+stochastically disrupts the deterministic periodicity of pseudo generation.
+Also by incorporating pseudo, we fetch fewer times from the server, 
+increasing speed.
 
-Statistical TEST RESULTS daily:  http://qrng.anu.edu.au/NIST.php
+Rigorous statistical TEST RESULTS daily:  http://qrng.anu.edu.au/NIST.php
+Internal statistical tests uses unittest:  test_randquantum.py
+
 
 References:
 
@@ -77,6 +84,7 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-10-09  Edit comments, getanu() and randquantum() docstrings for clarity.
 2015-10-08  Induce independence by hybrid between authentic and pseudo,
                rename old randquantum() as randquantum_safe().
                AUTH sets probability of authentic service.
@@ -99,21 +107,23 @@ CHANGE LOG  Latest version available at https://git.io/randomsys
 import urllib2
 from math   import log
 
-from random import randrange as pseudorange  #  Only for offline fallback.
+from random import randrange as pseudorange 
 from sys    import stderr                    #  Used to warn of fallback.
 
 
 AUTH = 0.50
-#      Non-zero prob( authentic ), see randquantum() which jumbles in pseudo.
-#      Induces stochastic independence due to use of two sources.
+#      Non-zero prob(authentic), should be reciprocal of positive integer; 
+#      see randquantum() which stochastically mixes in pseudo,
+#      inducing independence due to use of two sources.
+#      Recommend 0.50 for maximum uncertainty.
+#      For fully authentic output, let AUTH = 1.0 obviously.
+
 bestlen = int( 1024 / AUTH )
 #         Helps to minimize calls to server.
-
 
 NINERS = 0.99999999999
 #        ^reasonable system-dependent float representation of (1 - epsilon).
 #         More nines can cause rare unintended roundup errors. 
-
 
 Nwarn = 0
 #       Number of warnings. Usually indicative of failed calls to server.
@@ -128,13 +138,14 @@ def warn( message ):
 
 def getanu( url='https://qrng.anu.edu.au/API/jsonI.php?length=1024&type=uint16' ):
     '''Download list of Quantum Random Numbers from Australia National University.
-    See API doc: https://qrng.anu.edu.au/API/api-demo.php
-    where "uint16" returns integers between 0-65535 INCLUSIVE of endpoints, 
+    Note: "uint16" returns integers between 0-65535 INCLUSIVE of endpoints, 
     and maximum length permitted is 1024 (but multiple calls are permitted).
-
     Each time you download the "live stream" via the functions defined below,
     the server will deliver new and unique random numbers. Moreover, these
-    pages are authenticated and encrypted for security.
+    pages are authenticated and SSL encrypted for security.
+
+    See API doc: https://qrng.anu.edu.au/API/api-demo.php
+        Contact: cqc2t@anu.edu.au
     '''
     #  print "DEBUG: getanu() waiting for server to respond..."
     page = urllib2.urlopen( url, timeout=2 )
@@ -191,6 +202,10 @@ def randquantum( length ):
     The sources are clearly independent. This method also stochastically 
     disrupts the deterministic periodicity of pseudo generation.
     SPEED: by incorporating pseudo, we fetch fewer times from the server.
+
+    We set aside an authentic list from which we will draw upon 
+    with prob(authentic), otherwise we call upon some pseudo number, 
+    and thus we grow the hybrid list to desired length.
     '''
     #            AUTH at the top sets prob(authentic).
     aulen = int( AUTH * length )
@@ -202,10 +217,10 @@ def randquantum( length ):
     i = aulen - 1
     while len(hybrid) < length:
         if pseudorange( 0, authinverse ):
-            #              ^stochastically jumble authentic vs pseudo.
+            #              ^stochastically mixes authentic with pseudo.
             hybrid.append( pseudorange(0, 65536) )
         else:
-            #  Pick element from tailend of au in reverse order.
+            #  Pick element from tailend of safe in reverse order.
             if i >= 0:
                 hybrid.append( safe[i] )
                 i -= 1
