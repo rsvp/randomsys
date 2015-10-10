@@ -1,4 +1,4 @@
-#  Python Module for import                           Date : 2015-10-09
+#  Python Module for import                           Date : 2015-10-10
 #  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=python : per Python PEP 0263 
 ''' 
 _______________|  randquantum.py : true random numbers using quantum mechanics. 
@@ -84,6 +84,7 @@ References:
 
 
 CHANGE LOG  Latest version available at https://git.io/randomsys
+2015-10-10  Add BOOLauthentic switch for debugging convenience.
 2015-10-09  Edit comments, getanu() and randquantum() docstrings for clarity.
 2015-10-08  Induce independence by hybrid between authentic and pseudo,
                rename old randquantum() as randquantum_safe().
@@ -110,7 +111,6 @@ from math   import log
 from random import randrange as pseudorange 
 from sys    import stderr                    #  Used to warn of fallback.
 
-
 AUTH = 0.50
 #      Non-zero prob(authentic), should be reciprocal of positive integer; 
 #      see randquantum() which stochastically mixes in pseudo,
@@ -120,6 +120,9 @@ AUTH = 0.50
 
 bestlen = int( 1024 / AUTH )
 #         Helps to minimize calls to server.
+
+BOOLauthentic = True
+#   Set to False to see only pseudo results. Overrides AUTH for debugging.
 
 NINERS = 0.99999999999
 #        ^reasonable system-dependent float representation of (1 - epsilon).
@@ -181,7 +184,7 @@ def randquantum_pseudo( length ):
     return [ pseudorange(0, 65536) for i in range(length) ]
 
 
-def randquantum_safe( length, authentic=True ):
+def randquantum_safe( length, authentic=BOOLauthentic ):
     '''Authentic PRIMARY DEPENDENCY with offline FALLBACK.
     ___ATTN___  "authentic" switch for developer's debugging only.
     '''
