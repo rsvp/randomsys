@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-#              bash 4.3.11(1)     Linux Ubuntu 14.04.1        Date : 2014-11-04
+#              bash 4.3.11(1)     Linux Ubuntu 14.04.1        Date : 2015-10-15
 #
 # _______________|  dieharder-randquantum : comprehensive statistical testing.
 #
-#           Usage:  ./dieharder-randquantum [length] ["tests in quotes"]
+#           Usage:  dieharder-randquantum [length] ["tests in quotes"]
 #
-#        Examples:  ./dieharder-randquantum  54321    "-d 17 -d 204"
+#        Examples:  $ ./dieharder-randquantum 4321  "-d 204"  # Too small.
+#                   $ ./dieharder-randquantum  # All tests, reasonable length.
 #
 #    Dependencies:  dieharder (Ubuntu package, currently 3.31.1)
 #                   randquantum.py
 #  
-#  "The dieharder random number tester encapsulates all of the Gnu Scientific
+#  "Swiss army knife of random number test suites:
+#  The dieharder random number tester encapsulates all of the Gnu Scientific
 #  Library (GSL)  random number generators (rngs) as well as a number of
 #  generators from the R statistical library, hardware sources such as
 #  /dev/*random, "gold standard" cryptographic quality generators (useful for
@@ -22,12 +24,14 @@
 #  sources such as user contribution, other open source test suites, or the
 #  literature. The primary point of dieharder is to make it easy to time and test
 #  random number generators, including both software and hardware rngs, with a
-#  fully open source tool."  --Robert G. Brown
+#  fully open source tool."  --Robert G. Brown, rgb@phy.duke.edu
 #
-#       Ref:  http://www.phy.duke.edu/~rgb/General/dieharder.php
-#             $ man dieharder
+#      Home:  http://www.phy.duke.edu/~rgb/General/dieharder.php
+#       Doc:  http://www.phy.duke.edu/~rgb/General/dieharder/dieharder.html
+#   Offline:  $ man dieharder  # much better than Doc, p-value discussion.
 #
 #  CHANGE LOG  LATEST version available:   https://git.io/randomsys
+#  2015-10-15  Improve documentation.
 #  2015-10-14  First version.
 
 
@@ -49,7 +53,13 @@ set -u
 #   ^unassigned variables shall be errors.
 #    Example of default VARIABLE ASSIGNMENT:  arg1=${1:-'foo'}
 
-length=${1:-'2040'}
+length=${1:-'21654321'}
+#           ^far more than 21 million random samples would be better!
+#  For small length, dieharder recycles the data file.  Obviously this
+#  significantly reduces the sample space and can lead to completely 
+#  incorrect results for the p-value histograms unless there are 
+#  enough rands to run EACH test without repetition.
+
 tests=${2:-'-a'}
 #           ^all tests.  See $ dieharder -l  # for list of tests.
 
@@ -87,8 +97,10 @@ trap "die 'unhandled ERR via trap, but cleanup finished.' 116" ERR
 reportf="/tmp/${program}_report.txt"
 SECONDS=0
 
+warn "This will be EXTREMELY TIME-CONSUMING. Please stand-by..."
 
-#  Create HEADER for text file:
+
+#  Create HEADER for DATA text file:
 cat > $tmpf <<EOHereDoc
 #==================================================================
 # generator randquantum  seed = 0
@@ -105,14 +117,21 @@ import randquantum as rq
 with open( "$tmpf", 'a') as dataf:
      for i in range( $length ):
           rint = rq.randint( 4294967295 ) 
+          #                  i.e. 2^32-1
           dataf.write( str(rint) + '\n' )
 EOHereDoc
 
 #  DEBUG
-cat $tmpf > /tmp/${program}-tmp.txt
+#  cat $tmpf > /tmp/${program}-dataf-tmp.txt
 
-echo "# Report saved at:  $reportf "                   > $reportf
+warn "$SECONDS secs, generated random data file. STAND-BY for actual testing..."
 
+
+#  REPORT HEADER:
+echo "# $program $length $tests  # $(date -R)"         > $reportf
+echo "# Report saved at:  $reportf "                  >> $reportf
+
+#  REPORT ITSELF:
 dieharder  $tests  -g 202    -f $tmpf       2> $errf  >> $reportf
 #                     ^ASCII numbers, not raw binary.
 
@@ -123,13 +142,37 @@ dieharder  $tests  -g 202    -f $tmpf       2> $errf  >> $reportf
 #  digits will almost certainly fail bitlevel tests, although they may pass
 #  some of the tests that act on uniform deviates.
 
-
+#  Report footer:
 echo "# $program : $SECONDS secs to test $length integers (32-bit)." >> $reportf
+
 less $reportf
 
 cleanup    #  Instead of: trap arg EXIT
 # _______________ EOS ::  END of Script ::::::::::::::::::::::::::::::::::::::::
 
+
+#  "The assessment provided by dieharder in its standard report should be
+#  regarded with great suspicion.  It is entirely possible for a generator to
+#  pass all tests as far as their individual p-values are concerned and yet to
+#  fail utterly when considering them all together. Similarly, it is probable
+#  that a RNG will at the very least show up as "weak" on 0, 1 or 2 tests in a
+#  typical -a(ll) run, and may even "fail" 1 test one such run in 10 or so."
+
+#  The p-values themselves, as it turns out, are test statistics! By their
+#  nature, p-values should be uniformly distributed on the  range  0-1.   
+#  In 100+ test runs with independent seeds, one should not be surprised to 
+#  obtain 0, 1, 2, or even (rarely) 3 p-values less than 0.01.
+
+#  dieharder is extremely conservative about announcing rng "weakness" or
+#  "failure" relative to any given test.  It's internal criterion for these
+#  things are currently p < 0.5% or p > 99.5% weakness (at the 1% level total)
+#  and a considerably more stringent criterion for failure: p < 0.05% or p >
+#  99.95%.  Note well that the ranges are symmetric -- too high a value of p is
+#  just as bad (and unlikely) as too low, and it is critical to flag it, because
+#  it is quite possible for a RNG to be too good, on average, and not to
+#  produce enough low p-values on the full spectrum of dieharder tests.
+
+#  Stubborn BUG: operm5 test seems to fail all generators in dieharder.
 
 
 #  2015-10-14  Sample report:
