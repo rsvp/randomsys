@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+#              bash 4.3.11(1)     Linux Ubuntu 14.04.1        Date : 2014-11-04
+#
+# _______________|  dieharder-randquantum : comprehensive statistical testing.
+#
+#           Usage:  ./dieharder-randquantum [length] ["tests in quotes"]
+#
+#        Examples:  ./dieharder-randquantum  54321    "-d 17 -d 204"
+#
+#    Dependencies:  dieharder (Ubuntu package, currently 3.31.1)
+#                   randquantum.py
+#  
+#  "The dieharder random number tester encapsulates all of the Gnu Scientific
+#  Library (GSL)  random number generators (rngs) as well as a number of
+#  generators from the R statistical library, hardware sources such as
+#  /dev/*random, "gold standard" cryptographic quality generators (useful for
+#  testing dieharder and for purposes  of comparison to new generators) as well
+#  as generators contributed by users or found in the literature into a single
+#  harness that can time them and subject them to various tests for randomness.
+#  These tests are variously drawn from George Marsaglia's "Diehard battery of
+#  random number tests", the NIST Statistical Test Suite, and again from other
+#  sources such as user contribution, other open source test suites, or the
+#  literature. The primary point of dieharder is to make it easy to time and test
+#  random number generators, including both software and hardware rngs, with a
+#  fully open source tool."  --Robert G. Brown
+#
+#       Ref:  http://www.phy.duke.edu/~rgb/General/dieharder.php
+#             $ man dieharder
+#
+#  CHANGE LOG  LATEST version available:   https://git.io/randomsys
+#  2015-10-14  First version.
+
+
+#           _____ PREAMBLE_v3: settings, variables, and error handling.
+#
+LC_ALL=POSIX
+#      locale means "ASCII, US English, no special rules, 
+#      output per ISO and RFC standards." 
+#      Esp. use ASCII encoding for glob and sorting characters. 
+shopt -s   extglob
+#     ^set extended glob for pattern matching.
+shopt -s   failglob
+#         ^failed pattern matching signals error.
+set -e
+#   ^errors checked: immediate exit if a command has non-zero status. 
+set -o pipefail
+#   ^exit status on fail within pipe, not (default) last command.
+set -u
+#   ^unassigned variables shall be errors.
+#    Example of default VARIABLE ASSIGNMENT:  arg1=${1:-'foo'}
+
+length=${1:-'2040'}
+tests=${2:-'-a'}
+#           ^all tests.  See $ dieharder -l  # for list of tests.
+
+
+program=${0##*/}   #  similar to using basename
+tmpf=$( mktemp     /tmp/88_${program}_tmp.XXXXXXXXXX )
+memf=$( mktemp /dev/shm/88_${program}_tmp.XXXXXXXXXX )
+errf=$( mktemp /dev/shm/88_${program}_tmp.XXXXXXXXXX )
+
+
+cleanup () {
+     #  Delete temporary files, then optionally exit given status.
+     local status=${1:-'0'}
+     rm -f $tmpf $memf $errf
+     [ $status = '-1' ] ||  exit $status      #  thus -1 prevents exit.
+} #--------------------------------------------------------------------
+warn () {
+     #  Message with basename to stderr.          Usage: warn "message"
+     echo -e "\n !!  ${program}: $1 "  >&2
+} #--------------------------------------------------------------------
+die () {
+     #  Exit with status of most recent command or custom status, after
+     #  cleanup and warn.      Usage: command || die "message" [status]
+     local status=${2:-"$?"}
+     cat $errf >&2
+     cleanup -1  &&   warn "$1"  &&  exit $status
+} #--------------------------------------------------------------------
+trap "die 'SIG disruption, but cleanup finished.' 114" 1 2 3 15
+#    Cleanup after INTERRUPT: 1=SIGHUP, 2=SIGINT, 3=SIGQUIT, 15=SIGTERM
+trap "die 'unhandled ERR via trap, but cleanup finished.' 116" ERR
+#    Cleanup after command failure unless it's part of a test clause.
+#
+# _______________     ::  BEGIN  Script ::::::::::::::::::::::::::::::::::::::::
+
+reportf="/tmp/${program}_report.txt"
+SECONDS=0
+
+
+#  Create HEADER for text file:
+cat > $tmpf <<EOHereDoc
+#==================================================================
+# generator randquantum  seed = 0
+#==================================================================
+type: d
+count: $length
+numbit: 32
+EOHereDoc
+
+
+#  Add the random DATA:
+python2 <<EOHereDoc
+import randquantum as rq
+with open( "$tmpf", 'a') as dataf:
+     for i in range( $length ):
+          rint = rq.randint( 4294967295 ) 
+          dataf.write( str(rint) + '\n' )
+EOHereDoc
+
+#  DEBUG
+cat $tmpf > /tmp/${program}-tmp.txt
+
+echo "# Report saved at:  $reportf "                   > $reportf
+
+dieharder  $tests  -g 202    -f $tmpf       2> $errf  >> $reportf
+#                     ^ASCII numbers, not raw binary.
+
+#  A formatted ascii input file can accept either uints (integers in the range
+#  0 to 2^32-1, one per line) or decimal uniform deviates with at least
+#  ten significant digits (that can be multiplied by UINT_MAX = 2^32 to produce
+#  a uint without dropping precition), also one per line.  Floats with fewer
+#  digits will almost certainly fail bitlevel tests, although they may pass
+#  some of the tests that act on uniform deviates.
+
+
+echo "# $program : $SECONDS secs to test $length integers (32-bit)." >> $reportf
+less $reportf
+
+cleanup    #  Instead of: trap arg EXIT
+# _______________ EOS ::  END of Script ::::::::::::::::::::::::::::::::::::::::
+
+
+
+#  2015-10-14  Sample report:
+#
+#       $ ./dieharder-randquantum  4321  "-d 204"
+#       # Report saved at:  /tmp/dieharder-randquantum_report.txt 
+#       #=============================================================================#
+#       #            dieharder version 3.31.1 Copyright 2003 Robert G. Brown          #
+#       #=============================================================================#
+#          rng_name    |           filename             |rands/second|
+#            file_input|/tmp/88_dieharder-randquantum_tmp.ZDWB2DGBpB|  5.31e+05  |
+#       #=============================================================================#
+#               test_name   |ntup| tsamples |psamples|  p-value |Assessment
+#       #=============================================================================#
+#            rgb_kstest_test|   0|     10000|    1000|0.00000000|  FAILED  
+#       # dieharder-randquantum : 112 secs to test 4321 integers (32-bit).
+
+
+
+#  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=sh :
