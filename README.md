@@ -27,3 +27,7 @@ cannot be predicted beforehand. Most pseudo-random numbers have a finite
 period after which the sequence repeats. The output herein will not have such
 periodicity.
 
+We develop a faster stochastic hybrid method which integrates authentic and 
+pseudo generators to induce independence and eliminate predictable periodicity. 
+This has *PASSED Marsaglia Diehard, NIST STS, and RGB Dieharder tests.* 
+
