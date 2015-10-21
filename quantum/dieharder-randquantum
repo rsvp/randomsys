@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-#              bash 4.3.11(1)     Linux Ubuntu 14.04.1        Date : 2015-10-15
+#              bash 4.3.11(1)     Linux Ubuntu 14.04.1        Date : 2015-10-20
 #
 # _______________|  dieharder-randquantum : comprehensive statistical testing.
 #
 #           Usage:  dieharder-randquantum [length] ["tests in quotes"]
 #
 #        Examples:  $ ./dieharder-randquantum 4321  "-d 204"  # Too small.
-#                   $ ./dieharder-randquantum  # All tests, reasonable length.
+#
+#                   $ ./dieharder-randquantum  # Reasonable length, all tests.
+#                   #  This will be EXTREMELY TIME-CONSUMING (possibly days!)
+#                   #  See Appendix regarding execution and test results.
+#                   #  [ ] - TODO: write parallel version of this script.
 #
 #    Dependencies:  dieharder (Ubuntu package, currently 3.31.1)
 #                   randquantum.py
@@ -31,6 +35,8 @@
 #   Offline:  $ man dieharder  # much better than Doc, p-value discussion.
 #
 #  CHANGE LOG  LATEST version available:   https://git.io/randomsys
+#  2015-10-20  Include test results as reference.
+#                 PASSED Marsaglia Diehard, NIST STS, and RGB tests.
 #  2015-10-15  Improve documentation.
 #  2015-10-14  First version.
 
@@ -111,7 +117,7 @@ numbit: 32
 EOHereDoc
 
 
-#  Add the random DATA:
+#  Add the random DATA by simulating 32-bit unsigned integers:
 python2 <<EOHereDoc
 import randquantum as rq
 with open( "$tmpf", 'a') as dataf:
@@ -151,6 +157,8 @@ cleanup    #  Instead of: trap arg EXIT
 # _______________ EOS ::  END of Script ::::::::::::::::::::::::::::::::::::::::
 
 
+# _______________ APPENDIX
+
 #  "The assessment provided by dieharder in its standard report should be
 #  regarded with great suspicion.  It is entirely possible for a generator to
 #  pass all tests as far as their individual p-values are concerned and yet to
@@ -172,23 +180,187 @@ cleanup    #  Instead of: trap arg EXIT
 #  it is quite possible for a RNG to be too good, on average, and not to
 #  produce enough low p-values on the full spectrum of dieharder tests.
 
-#  Stubborn BUG: operm5 test seems to fail all generators in dieharder.
+
+#  $ dieharder -l         #  LIST of tests
+#  #=============================================================================#
+#  #            dieharder version 3.31.1 Copyright 2003 Robert G. Brown          #
+#  #=============================================================================#
+#  Installed dieharder tests:
+#   Test Number                         Test Name                Test Reliability
+#  ===============================================================================
+#    -d 0                            Diehard Birthdays Test              Good
+#    -d 1                               Diehard OPERM5 Test              Good
+#    -d 2                    Diehard 32x32 Binary Rank Test              Good
+#    -d 3                      Diehard 6x8 Binary Rank Test              Good
+#    -d 4                            Diehard Bitstream Test              Good
+#    -d 5                                      Diehard OPSO           Suspect
+#    -d 6                                 Diehard OQSO Test           Suspect
+#    -d 7                                  Diehard DNA Test           Suspect
+#    -d 8                Diehard Count the 1s (stream) Test              Good
+#    -d 9                  Diehard Count the 1s Test (byte)              Good
+#    -d 10                         Diehard Parking Lot Test              Good
+#    -d 11         Diehard Minimum Distance (2d Circle) Test             Good
+#    -d 12         Diehard 3d Sphere (Minimum Distance) Test             Good
+#    -d 13                             Diehard Squeeze Test              Good
+#    -d 14                                Diehard Sums Test        Do Not Use
+#    -d 15                                Diehard Runs Test              Good
+#    -d 16                               Diehard Craps Test              Good
+#    -d 17                     Marsaglia and Tsang GCD Test              Good
+#    -d 100                                STS Monobit Test              Good
+#    -d 101                                   STS Runs Test              Good
+#    -d 102                   STS Serial Test (Generalized)              Good
+#    -d 200                       RGB Bit Distribution Test              Good
+#    -d 201           RGB Generalized Minimum Distance Test              Good
+#    -d 202                           RGB Permutations Test              Good
+#    -d 203                             RGB Lagged Sum Test              Good
+#    -d 204                RGB Kolmogorov-Smirnov Test Test              Good
+#    -d 205                           DAB Byte Distribution              Good
+#    -d 206                                         DAB DCT              Good
+#    -d 207                              DAB Fill Tree Test              Good
+#    -d 208                            DAB Fill Tree 2 Test              Good
+#    -d 209                              DAB Monobit 2 Test              Good
+#  ----------------------------
+#  INFO on particular test, e.g. 
+#  $ dieharder -h -d 204
+#  ----------------------------
+#  * "Diehard" suite of tests developed by George Marsaglia.
+#        Not sure if Tsang GCD was part of that suite.
+#  * STS Statistical Test Suite developed by the National Institute 
+#                               for Standards and Technology (NIST).
+#  * RGB stands for dieharder founder, Robert G. Brown.
+#  * DAB tests possibly attributable to David Bauer (second collaborator).
+#       Those five DAB tests did not appear in dieharder v3.29,
+#       and seem to lack references to external literature.
 
 
-#  2015-10-14  Sample report:
-#
-#       $ ./dieharder-randquantum  4321  "-d 204"
-#       # Report saved at:  /tmp/dieharder-randquantum_report.txt 
-#       #=============================================================================#
-#       #            dieharder version 3.31.1 Copyright 2003 Robert G. Brown          #
-#       #=============================================================================#
-#          rng_name    |           filename             |rands/second|
-#            file_input|/tmp/88_dieharder-randquantum_tmp.ZDWB2DGBpB|  5.31e+05  |
-#       #=============================================================================#
-#               test_name   |ntup| tsamples |psamples|  p-value |Assessment
-#       #=============================================================================#
-#            rgb_kstest_test|   0|     10000|    1000|0.00000000|  FAILED  
-#       # dieharder-randquantum : 112 secs to test 4321 integers (32-bit).
+
+#  2015-10-20  Sample report from default length, almost all tests:
+#              Used Amazon EC2 t1.micro instance.
+#              21,654,321 random 32-bit unsigned integers took 84.07 hours 
+#              to generate, i.e. one hour produced 257,569 such integers.
+#              We were using inefficient randquantum.randint(). 
+#              Ideally dieharder should use 500 times more samples!
+#              Data file was 233 MB, of which 0.38% were pseudo substituted 
+#              for authentic due to 40 time-outs.
+#              Testing by dieharder then took additional 36 hours when the 
+#              process stopped out due to a connection problem.
+#  
+#  # dieharder-randquantum 21654321 -a  # Mon, 19 Oct 2015 05:14:31 +0000
+#  # Report saved at:  /tmp/dieharder-randquantum_report.txt 
+#  #=============================================================================#
+#  #            dieharder version 3.31.1 Copyright 2003 Robert G. Brown          #
+#  #=============================================================================#
+#     rng_name    |           filename             |rands/second|
+#       file_input|/tmp/88_dieharder-randquantum_tmp.brTszMsZQn|  1.69e+05  |
+#  #=============================================================================#
+#          test_name   |ntup| tsamples |psamples|  p-value |Assessment
+#  #=============================================================================#
+#     diehard_birthdays|   0|       100|     100|0.36735934|  PASSED  
+#        diehard_operm5|   0|   1000000|     100|0.29756350|  PASSED  
+#    diehard_rank_32x32|   0|     40000|     100|0.43871861|  PASSED  
+#      diehard_rank_6x8|   0|    100000|     100|0.20295255|  PASSED  
+#     diehard_bitstream|   0|   2097152|     100|0.95044052|  PASSED  
+#          diehard_opso|   0|   2097152|     100|0.13593932|  PASSED  
+#          diehard_oqso|   0|   2097152|     100|0.29327913|  PASSED  
+#           diehard_dna|   0|   2097152|     100|0.84761036|  PASSED  
+#  diehard_count_1s_str|   0|    256000|     100|0.61113566|  PASSED  
+#  diehard_count_1s_byt|   0|    256000|     100|0.55539206|  PASSED  
+#   diehard_parking_lot|   0|     12000|     100|0.82562887|  PASSED  
+#      diehard_2dsphere|   2|      8000|     100|0.29053410|  PASSED  
+#      diehard_3dsphere|   3|      4000|     100|0.51896864|  PASSED  
+#       diehard_squeeze|   0|    100000|     100|0.00002186|   WEAK   
+#          diehard_sums|   0|       100|     100|0.41781316|  PASSED  
+#          diehard_runs|   0|    100000|     100|0.64407271|  PASSED  
+#          diehard_runs|   0|    100000|     100|0.11976333|  PASSED  
+#         diehard_craps|   0|    200000|     100|0.28466439|  PASSED  
+#         diehard_craps|   0|    200000|     100|0.02607452|  PASSED  
+#   marsaglia_tsang_gcd|   0|  10000000|     100|0.00000000|  FAILED  
+#   marsaglia_tsang_gcd|   0|  10000000|     100|0.00000000|  FAILED  
+#           sts_monobit|   1|    100000|     100|0.14488281|  PASSED  
+#              sts_runs|   2|    100000|     100|0.82587766|  PASSED  
+#            sts_serial|   1|    100000|     100|0.77329350|  PASSED  
+#            sts_serial|   2|    100000|     100|0.99537404|   WEAK   
+#            sts_serial|   3|    100000|     100|0.43727068|  PASSED  
+#            sts_serial|   3|    100000|     100|0.24010370|  PASSED  
+#            sts_serial|   4|    100000|     100|0.45177785|  PASSED  
+#            sts_serial|   4|    100000|     100|0.60006555|  PASSED  
+#            sts_serial|   5|    100000|     100|0.53611344|  PASSED  
+#            sts_serial|   5|    100000|     100|0.92899296|  PASSED  
+#            sts_serial|   6|    100000|     100|0.85534912|  PASSED  
+#            sts_serial|   6|    100000|     100|0.31314991|  PASSED  
+#            sts_serial|   7|    100000|     100|0.85588997|  PASSED  
+#            sts_serial|   7|    100000|     100|0.68713360|  PASSED  
+#            sts_serial|   8|    100000|     100|0.90871030|  PASSED  
+#            sts_serial|   8|    100000|     100|0.33301025|  PASSED  
+#            sts_serial|   9|    100000|     100|0.54973345|  PASSED  
+#            sts_serial|   9|    100000|     100|0.97155256|  PASSED  
+#            sts_serial|  10|    100000|     100|0.76430771|  PASSED  
+#            sts_serial|  10|    100000|     100|0.64892963|  PASSED  
+#            sts_serial|  11|    100000|     100|0.02861835|  PASSED  
+#            sts_serial|  11|    100000|     100|0.09963801|  PASSED  
+#            sts_serial|  12|    100000|     100|0.86144819|  PASSED  
+#            sts_serial|  12|    100000|     100|0.02114020|  PASSED  
+#            sts_serial|  13|    100000|     100|0.30358787|  PASSED  
+#            sts_serial|  13|    100000|     100|0.26773786|  PASSED  
+#            sts_serial|  14|    100000|     100|0.17340514|  PASSED  
+#            sts_serial|  14|    100000|     100|0.28845487|  PASSED  
+#            sts_serial|  15|    100000|     100|0.23071524|  PASSED  
+#            sts_serial|  15|    100000|     100|0.21819698|  PASSED  
+#            sts_serial|  16|    100000|     100|0.52828137|  PASSED  
+#            sts_serial|  16|    100000|     100|0.45458442|  PASSED  
+#           rgb_bitdist|   1|    100000|     100|0.96880608|  PASSED  
+#           rgb_bitdist|   2|    100000|     100|0.80727901|  PASSED  
+#           rgb_bitdist|   3|    100000|     100|0.62375318|  PASSED  
+#           rgb_bitdist|   4|    100000|     100|0.38792718|  PASSED  
+#           rgb_bitdist|   5|    100000|     100|0.81609501|  PASSED  
+#           rgb_bitdist|   6|    100000|     100|0.47104701|  PASSED  
+#           rgb_bitdist|   7|    100000|     100|0.24713906|  PASSED  
+#           rgb_bitdist|   8|    100000|     100|0.99100252|  PASSED  
+#           rgb_bitdist|   9|    100000|     100|0.49286311|  PASSED  
+#           rgb_bitdist|  10|    100000|     100|0.46360257|  PASSED  
+#           rgb_bitdist|  11|    100000|     100|0.75452664|  PASSED  
+#           rgb_bitdist|  12|    100000|     100|0.64654143|  PASSED  
+#  rgb_minimum_distance|   2|     10000|    1000|0.87994256|  PASSED  
+#  rgb_minimum_distance|   3|     10000|    1000|0.08388680|  PASSED  
+#  rgb_minimum_distance|   4|     10000|    1000|0.06764412|  PASSED  
+#  rgb_minimum_distance|   5|     10000|    1000|0.26632977|  PASSED  
+#      rgb_permutations|   2|    100000|     100|0.98537298|  PASSED  
+#      rgb_permutations|   3|    100000|     100|0.76916317|  PASSED  
+#      rgb_permutations|   4|    100000|     100|0.12561118|  PASSED  
+#      rgb_permutations|   5|    100000|     100|0.21221968|  PASSED  
+#        rgb_lagged_sum|   0|   1000000|     100|0.15442191|  PASSED  
+#        rgb_lagged_sum|   1|   1000000|     100|0.24291646|  PASSED  
+#        rgb_lagged_sum|   2|   1000000|     100|0.00927749|  PASSED  
+#        rgb_lagged_sum|   3|   1000000|     100|0.06551750|  PASSED  
+#        rgb_lagged_sum|   4|   1000000|     100|0.13143020|  PASSED  
+#        rgb_lagged_sum|   5|   1000000|     100|0.00659628|  PASSED  
+#        rgb_lagged_sum|   6|   1000000|     100|0.09446976|  PASSED  
+#        rgb_lagged_sum|   7|   1000000|     100|0.05674447|  PASSED  
+#        rgb_lagged_sum|   8|   1000000|     100|0.00002614|   WEAK   
+#        rgb_lagged_sum|   9|   1000000|     100|0.11796778|  PASSED  
+#        rgb_lagged_sum|  10|   1000000|     100|0.01896299|  PASSED  
+#        rgb_lagged_sum|  11|   1000000|     100|0.00035283|   WEAK   
+#  [Connection died. At half sample, lagged_sum had PASSED through 31.]
+#  [Here's the Kolmogorov-Smirnov test manually for full sample.]
+#       rgb_kstest_test|   0|     10000|    1000|0.35735063|  PASSED
+#  [Skipped the five remaining tests from the DAB suite.]
+
+
+
+#  2015-10-14  Test script by using inadequate length, single test:
+#  
+#  $ ./dieharder-randquantum  4321  "-d 204"
+#  # Report saved at:  /tmp/dieharder-randquantum_report.txt 
+#  #=============================================================================#
+#  #            dieharder version 3.31.1 Copyright 2003 Robert G. Brown          #
+#  #=============================================================================#
+#     rng_name    |           filename             |rands/second|
+#       file_input|/tmp/88_dieharder-randquantum_tmp.ZDWB2DGBpB|  5.31e+05  |
+#  #=============================================================================#
+#          test_name   |ntup| tsamples |psamples|  p-value |Assessment
+#  #=============================================================================#
+#       rgb_kstest_test|   0|     10000|    1000|0.00000000|  FAILED  
+#  # dieharder-randquantum : 112 secs to test 4321 integers (32-bit).
 
 
 
