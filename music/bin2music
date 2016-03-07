@@ -1,10 +1,107 @@
-#  _______________ Bash One Liner - Compose Music From Entropy in /dev/urandom
+#!/usr/bin/env bash
+#              bash 4.3.11(1)   Linux 3.13.0 Ubuntu 14.04.3   Date : 2016-03-06
+#
+# _______________|  bin2music : binary bits to music.
+#
+#           Usage:  $ bin2music [file=/dev/urandom]
+#
+#        Examples:  $ ./bin2music          # Random music in minor key!
+#                   $ ./bin2music foo.jpg  # Musically play an image.
+#
+#    Dependencies:  sox (but aplay can be substituted, see playback function)
+#
+#  CHANGE LOG  Repository: https://github.com/rsvp/randomsys 
+#  2016-03-06  Convert from one-liner to multi-line for clarity
+#                 and modification: any binary file can be played,
+#                 replace aplay by sox in playback function.
+#  2016-03-05  Add converted source from 2016-03-04 blog post by:
+#                 Robert Elder, robert@robertelder.org
+#                 http://blog.robertelder.org/bash-one-liner-compose-music
+#                 His extensive comments preserved at EOF.
+
+
+#           _____ PREAMBLE_v3: settings, variables, and error handling.
+#
+LC_ALL=POSIX
+#      locale means "ASCII, US English, no special rules, 
+#      output per ISO and RFC standards." 
+#      Esp. use ASCII encoding for glob and sorting characters. 
+shopt -s   extglob
+#     ^set extended glob for pattern matching.
+shopt -s   failglob
+#         ^failed pattern matching signals error.
+set -e
+#   ^errors checked: immediate exit if a command has non-zero status. 
+set -o pipefail
+#   ^exit status on fail within pipe, not (default) last command.
+set -u
+#   ^unassigned variables shall be errors.
+#    Example of default VARIABLE ASSIGNMENT:  arg1=${1:-'foo'}
+
+file=${1:-'/dev/urandom'}
+
+program=${0##*/}   #  similar to using basename
+errf=$( mktemp /dev/shm/88_${program}_tmp.XXXXXXXXXX )
+
+
+cleanup () {
+     #  Delete temporary files, then optionally exit given status.
+     local status=${1:-'0'}
+     rm -f $errf
+     [ $status = '-1' ] ||  exit $status      #  thus -1 prevents exit.
+} #--------------------------------------------------------------------
+warn () {
+     #  Message with basename to stderr.          Usage: warn "message"
+     echo -e "\n !!  ${program}: $1 "  >&2
+} #--------------------------------------------------------------------
+die () {
+     #  Exit with status of most recent command or custom status, after
+     #  cleanup and warn.      Usage: command || die "message" [status]
+     local status=${2:-"$?"}
+     cat $errf >&2
+     cleanup -1  &&   warn "$1"  &&  exit $status
+} #--------------------------------------------------------------------
+trap "die 'SIG disruption, but cleanup finished.' 114" 1 2 3 15
+#    Cleanup after INTERRUPT: 1=SIGHUP, 2=SIGINT, 3=SIGQUIT, 15=SIGTERM
+trap "die 'unhandled ERR via trap, but cleanup finished.' 116" ERR
+#    Cleanup after command failure unless it's part of a test clause.
+#
+# _______________     ::  BEGIN  Script ::::::::::::::::::::::::::::::::::::::::
+
+
+tones () {
+     #            "0,2,4,5,7,9,11,12" for major, instead of minor:
+     awk '{ split("0,2,3,5,7,8,10,12", a,",");    \
+              for (i = 0; i < 1; i+= 0.0001)      \
+              printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)) }'
+}
+
+
+playback () {
+     ##       Various playback options:
+     #  aplay -c 2 -f S32_LE -r 16000  #  As originally proposed.
+     #        For macs, sox seems better:
+     sox -t raw -r 64k -c 1 -e unsigned -b 8 - -d
+}
+
+
+cat "$file" | hexdump -v -e '/1 "%u\n"'  \
+     | tones                             \
+     | xxd -r -p                         \
+     | playback
+
+
+cleanup    #  Instead of: trap arg EXIT
+# _______________ EOS ::  END of Script ::::::::::::::::::::::::::::::::::::::::
+
+
+#  _______________ Bash One-Liner: Compose Music From Entropy in /dev/urandom
 #
 #  Robert Elder, robert@robertelder.org, Twitter: @RobertElderSoft  
 #  http://blog.robertelder.org/bash-one-liner-compose-music
 #  March 4, 2016
 
-cat /dev/urandom | hexdump -v -e '/1 "%u\n"' | awk '{ split("0,2,4,5,7,9,11,12", a,","); for (i = 0; i < 1; i+= 0.0001) printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)) }' | xxd -r -p | aplay -c 2 -f S32_LE -r 16000
+#  cat /dev/urandom | hexdump -v -e '/1 "%u\n"' | awk '{ split("0,2,4,5,7,9,11,12", a,","); for (i = 0; i < 1; i+= 0.0001) printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)) }' | xxd -r -p | aplay -c 2 -f S32_LE -r 16000
 
 #  The above command was tested on Ubuntu 14.04.  You should hear music play
 #  through your speakers.
@@ -121,3 +218,4 @@ cat /dev/urandom | hexdump -v -e '/1 "%u\n"' | awk '{ split("0,2,4,5,7,9,11,12",
 #  cat /dev/urandom | hexdump -v -e '/1 "%u\n"' | awk '{ split("0,2,3,5,7,8,10,12", a,","); for (i = 0; i < 1; i+= 0.0001) printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)) }' | xxd -r -p | aplay -c 2 -f S32_LE -r 16000 
 
 
+#  vim: set fileencoding=utf-8 ff=unix tw=78 ai syn=sh :
