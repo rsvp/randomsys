@@ -1,0 +1,123 @@
+#  _______________ Bash One Liner - Compose Music From Entropy in /dev/urandom
+#
+#  Robert Elder, robert@robertelder.org, Twitter: @RobertElderSoft  
+#  http://blog.robertelder.org/bash-one-liner-compose-music
+#  March 4, 2016
+
+cat /dev/urandom | hexdump -v -e '/1 "%u\n"' | awk '{ split("0,2,4,5,7,9,11,12", a,","); for (i = 0; i < 1; i+= 0.0001) printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)) }' | xxd -r -p | aplay -c 2 -f S32_LE -r 16000
+
+#  The above command was tested on Ubuntu 14.04.  You should hear music play
+#  through your speakers.
+#  
+#            _____ cat /dev/urandom
+#  
+#  prints the contents of /dev/urandom to stdout. Since the [non-blocking] output
+#  of /dev/urandom is random binary bytes, we can use hexdump to format it into
+#  nice integers from 0-255:
+#  
+#            _____ hexdump -v -e '/1 "%u\n"'
+#  
+#  Here is a sample of the output from hexdump:
+#  
+#       cat /dev/urandom  | hexdump -v -e '/1 "%u\n"' | head
+#       135
+#       16
+#       156
+#       54
+#       115
+#       156
+#       116
+#       20
+#       59
+#       191
+#  
+#  
+#  The -v flag gets rid of the hexdump's default behaviour of replacing repeated
+#  lines with a '*' character.  The -e flag uses '/1 "%u\n"' to print out the
+#  binary byte as an a formatted decimal number.
+#  
+#  These integers in the range of 0-255 are then passed into awk, one line at a
+#  time:
+#  
+#            _____ awk '...'
+#  
+#  The ... part is the following small program:
+#  
+#       split("0,2,4,5,7,9,11,12",a,",");
+#       for (i = 0; i < 1; i+= 0.0001) 
+#       printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)* log(2))*i))
+#  
+#  
+#  The line: split("0,2,4,5,7,9,11,12",a,",");
+#  
+#  creates an array 'a' which encodes the relative number of semitones from the
+#  base note in a MAJOR musical scale.  This array is useful in the print
+#  statement because the frequency in Hertz of a musical note with equal
+#  temperament can be calculated using the following formula: 440 * 2^(semitone
+#  distance / 12).  440Hz has arbitrarily been chosen as the reference note, and
+#  it represents the frequency of A4.
+#  
+#  [ For MINOR scale use: split("0,2,3,5,7,8,10,12", a,","); ]
+#  
+#  The for loop then prints formatted 4 byte hexadecimal numbers that represent
+#  the amplitude of the sound wave at a given point in time:
+#  
+#       printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i))
+#  
+#  The formula: 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)
+#  
+#  Can be broken down as follows:
+#  
+#       100 A scalar multiple used to control the volume.
+#       *
+#       sin(
+#               1382 =~ 440 * 3.14159
+#               *
+#               exp(  Awk doesn't seem to support arbitrary powers, 
+#                     so we use 2^x = e^(x *ln(2))
+#                       (
+#                               a[$1 % 8] Pick semitone randomly on major scale
+#                               /
+#                               12   Divide by 12 per the formula
+#                       )
+#                       *
+#                       log(2)
+#               )
+#               *
+#               i  The counter in the for loop that counts from 0 to 1
+#       )
+#  
+#  
+#  The amount of time that each note is played for can be controlled by changing
+#  how fast the for loop counts up to 1.  This number will also affect the
+#  perceived frequency.
+#  
+#  The above formula makes a bit more sense if you think about it in the following
+#  way.  If you did
+#  
+#       for (i = 0; i < 1; i+= 0.0001) sin(i * 3.14159);
+#  
+#  This will just calculate values on one cycle of a sine curve.  If you then
+#  multiply 'i' by a frequency X of a musical note, each iteration of the for
+#  loop will calculate points on the X cycles of notes of the given frequency so
+#  the amplitude will change faster than the original 1 cycle per completion of
+#  the for loop.
+#  
+#  The next part of the pipe uses xxd to convert the 8 byte hexadecimal values back
+#  into binary:
+#  
+#       xxd -r -p
+#  
+#  Which is then fed into aplay and turned into audible sound:
+#  
+#       aplay -c 2 -f S32_LE -r 16000
+#  
+#  
+#  _______________ SAD Music
+#  
+#  If you want to make the music sound sad, you can change from the major scale to
+#  a minor scale:
+
+#  cat /dev/urandom | hexdump -v -e '/1 "%u\n"' | awk '{ split("0,2,3,5,7,8,10,12", a,","); for (i = 0; i < 1; i+= 0.0001) printf("%08X\n", 100*sin(1382*exp((a[$1 % 8]/12)*log(2))*i)) }' | xxd -r -p | aplay -c 2 -f S32_LE -r 16000 
+
+
