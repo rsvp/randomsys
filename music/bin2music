@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-#              bash 4.3.11(1)   Linux 3.13.0 Ubuntu 14.04.3   Date : 2016-03-06
+#              bash 4.3.11(1)   Linux 3.13.0 Ubuntu 14.04.3   Date : 2016-03-08
 #
 # _______________|  bin2music : binary bits to music.
 #
 #           Usage:  $ bin2music [file=/dev/urandom]
 #
-#        Examples:  $ ./bin2music          # Random music in minor key!
-#                   $ ./bin2music foo.jpg  # Musically play an image.
+#        Examples:  $ ./bin2music                  # Random music in minor key!
+#                   $ ./bin2music foo.jpg          # Musically play an image.
+#                   $ cat foo.jpg | ./bin2music -  # Pipe works also.
 #
 #    Dependencies:  sox (but aplay can be substituted, see playback function)
 #
 #  CHANGE LOG  Repository: https://github.com/rsvp/randomsys 
+#  2016-03-08  Add less treble and bass, with more tremelo, as sound effects.
+#                 Reverb with sox does not work well here.
 #  2016-03-06  Convert from one-liner to multi-line for clarity
 #                 and modification: any binary file can be played,
 #                 replace aplay by sox in playback function.
@@ -81,7 +84,9 @@ playback () {
      ##       Various playback options:
      #  aplay -c 2 -f S32_LE -r 16000  #  As originally proposed.
      #        For macs, sox seems better:
-     sox -t raw -r 64k -c 1 -e unsigned -b 8 - -d
+     #  sox -t raw -r 64k -c 1 -e unsigned -b 8 - -d
+     sox -t raw -r 64k -c 1 -e unsigned -b 8 - -d treble -27 bass -3 \
+         tremolo 0.20 43 
 }
 
 
